@@ -164,7 +164,7 @@
             $.ajax({
                 type: "GET",
                 async: false,
-                url: "http://localhost:7000/symbols",
+                url: "http://localhost:3000/symbols",
                 dataType: "text",
                 success: function(symbol_data) {
                     var symbol_lines = symbol_data.split(/\r\n|\n/);
@@ -190,7 +190,7 @@
           $.ajax({
               type: "GET",
               async: false,
-              url: "http://localhost:7000/symbols/" + symbol,
+              url: "http://localhost:3000/symbols/" + symbol,
               dataType: "text",
               success: function(content) {
                   if(!symbol) {
