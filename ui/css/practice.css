@@ -1,0 +1,65 @@
+.practice {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.setting {
+  margin-left: 30px;
+}
+
+.price, .position {
+  font-weight: normal;
+}
+
+.order {
+  margin: 10px 30px;
+  padding: 10px 0;
+  border:1px dotted;
+}
+
+.trades {
+  margin: 10px 60px;
+}
+
+.setting_label {
+  font-family: Arial;
+  margin-left: 10px;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+
+.setting_field, .order_field {
+  font-size: 16px;
+}
+
+.order_field {
+  margin-left: 20px;
+}
+
+#pending_position {
+  margin-left: 60px;
+}
+
+#next_day {
+  margin-left: 10px;
+  margin-right: 20px;
+  padding: 0 25px;
+  font-size: 20px;
+}
+
+#profit_loss {
+  margin: 0 30px;
+}
+
+#random_stock {
+  margin-left: 30px;
+  padding: 5px 20px;
+}
+
+#txns {
+  margin-left: 20px;
+  font-weight: normal;
+}
+
+.ui-autocomplete { max-height: 80px; overflow-y: auto; overflow-x: hidden;}

@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="css/practice.css">
+    <link rel="stylesheet" href="css/jquery-ui.css">
+    <script type="text/javascript" src="js/underscore.js"></script>
+    <script type="text/javascript" src="js/d3.js"></script>
+    <script type="text/javascript" src="js/jquery.js"></script>
+    <script type="text/javascript" src="js/jquery-ui.js"></script>
+    <script type="text/javascript">
+      var width = 1150;
+      var height = 500;
+      var open, close, high, low, order_type, order_price_type, order_price, tradingDates = new Array();
+      var stock_ownership, stock_cost, trades = new Array(), symbols = new Array();;
+
+      String.prototype.format = function () {
+          var formatted = this;
+          for (var i = 0; i < arguments.length; i++) {
+              var regexp = new RegExp('\\{' + i + '\\}', 'gi');
+              formatted = formatted.replace(regexp, arguments[i]);
+          }
+          return formatted;
+      };
+
+      function min(a, b) {
+          return a < b ? a : b;
+      }
+
+      function max(a, b) {
+          return a > b ? a : b;
+      }
+
+	  function nextTradingDay(date) {
+          for (var i = 0; i < tradingDates.length; i++) {
+              if(date == tradingDates[i]) {
+                  return tradingDates[i-1];
+              }
+          }
+	  }
+
+      function buildChart(data) {
+          $("#chart").empty();
+
+          var margin = 50;
+
+          var chart = d3.select("#chart")
+              .append("svg:svg")
+              .attr("class", "chart")
+              .attr("width", width)
+              .attr("height", height);
+
+          var y = d3.scale.linear()
+              .domain([d3.min(data.map(function (x) {
+                  return x["Low"];
+              })), d3.max(data.map(function (x) {
+                  return x["High"];
+              }))])
+              .range([height - margin, margin]);
+          var x = d3.scale.linear()
+              .domain([d3.min(data.map(function (d) {
+                  return d.timestamp;
+              })), d3.max(data.map(function (d) {
+                  return d.timestamp;
+              }))])
+              .range([margin, width - margin]);
+
+          chart.selectAll("line.x")
+              .data(x.ticks(10))
+              .enter().append("svg:line")
+              .attr("class", "x")
+              .attr("x1", x)
+              .attr("x2", x)
+              .attr("y1", margin)
+              .attr("y2", height - margin)
+              .attr("stroke", "#ccc");
+
+          chart.selectAll("line.y")
+              .data(y.ticks(10))
+              .enter().append("svg:line")
+              .attr("class", "y")
+              .attr("x1", margin)
+              .attr("x2", width - margin)
+              .attr("y1", y)
+              .attr("y2", y)
+              .attr("stroke", "#ccc");
+
+          chart.selectAll("text.xrule")
+              .data(x.ticks(10))
+              .enter().append("svg:text")
+              .attr("class", "xrule")
+              .attr("x", x)
+              .attr("y", height - margin)
+              .attr("dy", 20)
+              .attr("text-anchor", "middle")
+              .text(function (d) {
+                  var date = new Date(d * 1000);
+                  return (date.getMonth() + 1) + "/" + date.getDate();
+              });
+
+          chart.selectAll("text.yrule")
+              .data(y.ticks(8))
+              .enter().append("svg:text")
+              .attr("class", "yrule")
+              .attr("x", width - margin + 10)
+              .attr("y", y)
+              .attr("dy", 0)
+              .attr("dx", 20)
+              .attr("text-anchor", "middle")
+              .text(String);
+
+          chart.selectAll("rect")
+              .data(data)
+              .enter().append("svg:rect")
+              .attr("x", function (d) {
+                  return x(d.timestamp);
+              })
+              .attr("y", function (d) {
+                  return y(max(d.Open, d.Close));
+              })
+              .attr("height", function (d) {
+                  return y(min(d.Open, d.Close)) - y(max(d.Open, d.Close));
+              })
+              .attr("width", function (d) {
+                  return 0.5 * (width - 2 * margin) / data.length;
+              })
+              .attr("fill", function (d) {
+                  return d.Open > d.Close ? "red" : "green";
+              });
+
+          chart.selectAll("line.stem")
+              .data(data)
+              .enter().append("svg:line")
+              .attr("class", "stem")
+              .attr("x1", function (d) {
+                  return x(d.timestamp) + 0.25 * (width - 2 * margin) / data.length;
+              })
+              .attr("x2", function (d) {
+                  return x(d.timestamp) + 0.25 * (width - 2 * margin) / data.length;
+              })
+              .attr("y1", function (d) {
+                  return y(d.High);
+              })
+              .attr("y2", function (d) {
+                  return y(d.Low);
+              })
+              .attr("stroke", function (d) {
+                  return d.Open > d.Close ? "red" : "green";
+              })
+             .on("mouseover", function(d) {
+                  $("#open").html(d.Open);
+			      $("#close").html(d.Close);
+			      $("#high").html(d.High);
+      	          $("#low").html(d.Low);
+
+                  return tooltip.style("visibility", "visible");
+              })
+      }
+
+      function loadSymbols() {
+          $.ajax({
+	          type: "GET",
+	          async: false,
+	          url: "http://localhost:7000/symbols",
+	          dataType: "text",
+	          success: function(symbol_data) {
+	              var symbol_lines = symbol_data.split(/\r\n|\n/);
+	              _.each(symbol_lines, function(symbol, i) {
+                      symbols[i] = symbol;
+                  });
+              }
+          });
+
+          $( "#symbol" ).autocomplete({
+		      source: symbols
+          });
+      }
+
+      function fetchData() {
+          var last_date = $("#datepicker").val();
+          var symbol = $("#symbol").val();
+      	  var max_days = $("#view").val();
+
+          var result = new Array();
+          tradingDates = new Array();
+
+          $.ajax({
+            type: "GET",
+            async: false,
+            url: "http://localhost:7000/symbols/" + symbol,
+            dataType: "text",
+            success: function(content) {
+              var lines = content.split(/\r\n|\n/);
+              var i = 0, found = false;
+              _.each(lines, function(line, line_num) {
+                var fields = line.split(",");
+
+                date = fields[0];
+
+                if(date == last_date) {
+                  found = true;
+                }
+
+                if(found && i <= max_days) {
+                  result[i] = {"timestamp": (new Date(date).getTime() / 1000), "date":date,"Date":date,"Open":fields[1],"High":fields[2],"Low":fields[3],"Close":fields[4],"Volume":fields[5],"Adj_Close":fields[6]};
+
+                if(i == 0) {
+                  open = fields[1];
+                  high = fields[2];
+                  low = fields[3];
+                  close = fields[4];
+                }
+
+                  i = i + 1;
+
+                }
+                tradingDates[line_num] = date;
+              });
+            }
+          });
+
+          updatePrices();
+          buildChart(result);
+          triggerOrder();
+          refreshOpenPosition();
+          refreshTxns();
+      }
+
+      function refreshTxns() {
+          $("#txns").empty("");
+          _.each(trades, function(trade) {
+		      $("#txns").prepend("<li>" + trade + "</li>");
+          })
+      }
+
+	  function refreshOpenPosition() {
+	      var profit_loss;
+	      if(stock_cost != null) {
+	          profit_loss = (close - stock_cost) / stock_cost * 100;
+	          $("#profit_loss").html(profit_loss.toFixed(2) + "%");
+	      } else {
+	          $("#profit_loss").empty();
+	      }
+
+
+          $("#stock_ownership").html(stock_ownership);
+          $("#stock_cost").html(stock_cost);
+	  }
+
+      function executeOrder(ownership, cost)
+      {
+          if(ownership == "short") {
+              if(stock_ownership == "long") {
+                  var profit = (cost - stock_cost) / stock_cost * 100;
+                  var txn = $("#symbol").val().toUpperCase() + ": Bought at " + stock_cost + ". Sold at " + cost + ". Profit = " + profit.toFixed(2) + "%";
+                  trades.push(txn);
+                  stock_ownership = null;
+                  stock_cost = null;
+
+              } else {
+                  stock_ownership = ownership;
+                  stock_cost = cost;
+              }
+          }
+
+          if(ownership == "long") {
+              if(stock_ownership == "short") {
+   	              var profit = (stock_cost - cost) / stock_cost * 100;
+   	              var txn = $("#symbol").val().toUpperCase() + ": Sold at " + stock_cost + ". Bought at " + cost + ". Profit = " + profit.toFixed(2) + "%";
+   	              trades.push(txn);
+   	              stock_ownership = null;
+	              stock_cost = null;
+              } else {
+                  stock_ownership = ownership;
+                  stock_cost = cost;
+              }
+          }
+
+          order_type = null;
+          order_price_type = null;
+          order_price = null;
+
+          $("#pending_order_type").html("");
+          $("#pending_order_price_type").html("");
+          $("#pending_order_price").html("");
+      }
+
+      function triggerOrder() {
+          if(_.isUndefined(order_price)) { return; }
+
+          if(order_type == "buy") {
+              if(order_price_type == "stop") {
+                  if(open >= order_price) {
+                      executeOrder("long", open);
+                  }
+                  else if(high >= order_price) {
+                      executeOrder("long", order_price);
+                  }
+              } else if(order_price_type == "limit") {
+                  if(open <= order_price) {
+                      executeOrder("long", open);
+                  }
+                  else if(low <= order_price) {
+                      executeOrder("long", order_price);
+                  }
+              } else if(order_price_type == "market") {
+                  executeOrder("long", open);
+              }
+          }
+          else if(order_type == "sell") {
+              if(order_price_type == "stop") {
+                  if(open <= order_price) {
+                      executeOrder("short", open);
+                  }
+                  else if(low <= order_price) {
+                      executeOrder("short", order_price);
+                  }
+              } else if(order_price_type == "limit") {
+                  if(open >= order_price) {
+                      executeOrder("short", open);
+                  }
+                  else if(high >= order_price) {
+                      executeOrder("short", order_price);
+                  }
+              } else if(order_price_type == "market") {
+                  executeOrder("short", open);
+              }
+          }
+
+      }
+
+      function updatePrices() {
+          $("#open").html(open);
+       	  $("#close").html(close);
+      	  $("#high").html(high);
+      	  $("#low").html(low);
+      }
+
+
+	  function moveToNextDate() {
+	      var nextDate = nextTradingDay($("#datepicker").val());
+          $("#datepicker").val(nextDate);
+          fetchData();
+	  }
+
+	  function placeOrder() {
+          order_type = $("#order_type").val();
+          order_price_type = $("#price_type").val();
+          order_price = $("#price").val();
+
+          $("#pending_order_type").html(order_type);
+          if(order_type != "none") {
+              $("#pending_order_price_type").html(order_price_type);
+              $("#pending_order_price").html(order_price);
+          }
+	  }
+
+	  function getRandomStock() {
+        var symbol = symbols[Math.floor(Math.random()*symbols.length)];
+        $("#symbol").val(symbol);
+        $("#datepicker").val(tradingDates[260] || '2013-05-24');
+        fetchData();
+	  }
+
+      $(document).ready(function() {
+          $("#datepicker").datepicker({ dateFormat: 'yy-mm-dd', beforeShowDay: $.datepicker.noWeekends });
+          loadSymbols();
+          fetchData();
+      });
+
+    </script>
+
+  </head>
+  <body class="practice">
+    <div id="chart"></div>
+    <form>
+      <div class="setting">
+        <label for="symbol" class="setting_label">Symbol</label>
+        <input type="text" id="symbol" name="symbol" class="setting_field" onkeyup="fetchData();"/>
+
+        <label for="view" class="setting_label">View</label>
+        <select id="view" name="view" onchange="fetchData();">
+          <option value="130" selected>6 Months</option>
+          <option value="260">1 Year</option>
+        </select>
+
+        <label for="date" class="setting_label">Date</label>
+		<input onchange="fetchData();" type="text" name="date" id="datepicker" class="setting_field" />
+
+		<button onclick="moveToNextDate();" type="button" id="next_day">Next</button>
+
+		Open: <span class="price" id="open"></span>, High: <span class="price" id="high"></span>, Low: <span class="price" id="low"></span>, Close: <span class="price" id="close"></span>
+
+	  </div>
+	  <div class="order">
+        <select id="order_type" onchange="placeOrder();" class="order_field">
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+          <option value="none" selected>None</option>
+        </select>
+        <select id="price_type" onchange="placeOrder();" class="order_field">
+          <option value="stop" selected>Stop</option>
+          <option value="limit">Limit</option>
+          <option value="market">Market</option>
+        </select>
+        &nbsp;&nbsp;&nbsp;@
+        <input type="text" id="price" class="order_field" onchange="placeOrder();" />
+        <button onclick="getRandomStock();" type="button" id="random_stock">Random Stock</button>
+	  </div>
+	  <div class="trades">
+		<span id="open_position">Open Position: <span id="stock_ownership" class="position"></span> <span id="stock_cost" class="position"></span></span> <span id="profit_loss" class="position"></span
+		<span id="pending_position">Pending Position: <span id="pending_order_type" class="position"></span> <span id="pending_order_price_type" class="position"></span> @ <span id="pending_order_price" class="position"></span></span>
+	  </div>
+	  <ol id="txns">
+	  </ol>
+    </form>
+  </body>
+</html>
