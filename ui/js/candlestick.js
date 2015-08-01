@@ -79,10 +79,10 @@ function buildChart(data) {
             return x(d.timestamp);
         })
         .attr("y", function (d) {
-            return y(max(d.Open, d.Close));
+            return y(_.max([d.Open, d.Close]));
         })
         .attr("height", function (d) {
-            return y(min(d.Open, d.Close)) - y(max(d.Open, d.Close));
+            return y(_.min([d.Open, d.Close])) - y(_.max([d.Open, d.Close]));
         })
         .attr("width", function (d) {
             return 0.5 * (width - 2 * margin) / data.length;
